@@ -44,7 +44,7 @@ function App() {
         }
       },
       width: 1280,
-      height: 720
+      height: 720,
     });
     camera.start();
 
@@ -64,6 +64,7 @@ function App() {
 
     mediaRecorderRef.current.onstop = async () => {
       setHasRecorededData(true)
+      setRecording(false)
       mediaRecorderRef.current = null
     }
     mediaRecorderRef.current.start(200)
@@ -72,7 +73,7 @@ function App() {
   const handleStop = () => {
     try {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop())
+        // mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop())
         mediaRecorderRef.current.stop()
       }
     } catch (e) {
