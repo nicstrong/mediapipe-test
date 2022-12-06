@@ -4,27 +4,38 @@
 
   display: flex;
   flex-direction: column;
+
+
 }
 
 
-.videoSource {
-  border: 2px solid red;
-  display: none;
-}
-
-.canvas {
-  border: 2px solid green;
-  display: none;
-}
-
-.videoDest {
-  /* border: 2px solid blue; */
+.videoContainer {
+  width: 100%;
+  border: black 1px solid;
 }
 
 .controls {
   display: flex;
+  flex-direction: column;
+  padding: 1em;
+  background-color: white;
+}
+
+.buttons {
+  display: flex;
   flex-direction: row;
   gap: 1em;
-  padding: 1em;
   margin-top: auto;
+  margin-bottom: 1em;
+}
+
+.deviceSelector {
+  display: flex;
+  flex-direction: row;
+  gap: 1em;
+  flex: 1;
+}
+
+.deviceSelector>*:first-child {
+  margin-bottom: 1em;
 }

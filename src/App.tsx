@@ -1,136 +1,95 @@
-import React, { useEffect, useRef, useState } from 'react'
-import { Results, SelfieSegmentation } from "@mediapipe/selfie_segmentation"
-import './App.css'
-import { Camera } from '@mediapipe/camera_utils'
+import { useMemo, useRef, useState } from 'react';
+import './App.css';
+import { DeviceSelector } from './DeviceSelector';
+import { createVideo } from './media';
 
+type UnwrapPromise<T> = T extends Promise<(infer R)> ? R : never
+
+enum RecordingState {
+  preview = 'preview',
+  recording = 'recording',
+  review = 'review'
+}
 function App() {
-  const inputVideoRef = useRef<HTMLVideoElement>(null)
-  const outputVideoRef = useRef<HTMLVideoElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const contextRef = useRef<CanvasRenderingContext2D | null>(null)
-  const canvasStreamRef = useRef<MediaStream | null>(null)
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const recordedDataRef = useRef<Blob[] | null>(null)
-  const [recording, setRecording] = useState(false)
-  const [hasRecorededData, setHasRecorededData] = useState(false)
+  const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null)
+  const [selectedAudioId, setSelectedAudioId] = useState<string | null>(null)
+  const [recordingState, setRecordingState] = useState<RecordingState>(RecordingState.preview)
+  const [mediaHandler, setMediaHandler] = useState<UnwrapPromise<ReturnType<typeof createVideo>> | null>(null)
 
-  useEffect(() => {
-    if (!canvasRef.current) return;
-    if (!inputVideoRef.current) return;
-    if (!outputVideoRef.current) return;
-    contextRef.current = canvasRef.current.getContext("2d");
+  const mediaStreamTrackApiUnsupported = useMemo(() => {
 
-    // render the canvas too a video element to play, this way
-    // we can also wrap the stream in a MediaRecorder to do what we want with the video
-    const stream = canvasRef.current.captureStream(30)
-    outputVideoRef.current.srcObject = stream
-    canvasStreamRef.current = stream
-
-    const selfieSegmentation = new SelfieSegmentation({
-      locateFile: (file) =>
-        `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`,
-    });
-
-    selfieSegmentation.setOptions({
-      modelSelection: 1
-    })
-
-    selfieSegmentation.onResults(onResults);
-
-    const camera = new Camera(inputVideoRef.current, {
-      onFrame: async () => {
-        if (inputVideoRef.current) {
-          await selfieSegmentation.send({ image: inputVideoRef.current });
-        }
-      },
-      width: 1280,
-      height: 720,
-    });
-    camera.start();
-
+    return typeof MediaStreamTrackProcessor === 'undefined' ||
+      typeof MediaStreamTrackGenerator === 'undefined'
   }, [])
 
-  const handleStart = () => {
-    if (!canvasStreamRef.current) return
-    setRecording(true)
-    recordedDataRef.current = []
-    setHasRecorededData(false)
-    mediaRecorderRef.current = new MediaRecorder(canvasStreamRef.current, { mimeType: 'video/webm;codecs=vp9' })
+  const outputVideoRef = useRef<HTMLVideoElement | null>(null)
 
-    mediaRecorderRef.current.ondataavailable = e => {
-      if (recordedDataRef.current === null) return // we already stopped
-      recordedDataRef.current.push(e.data)
-    }
 
-    mediaRecorderRef.current.onstop = async () => {
-      setHasRecorededData(true)
-      setRecording(false)
-      mediaRecorderRef.current = null
-    }
-    mediaRecorderRef.current.start(200)
+
+  function handleStart() {
+
+  }
+  function handleStop() {
+
+  }
+  function handleSave() {
+
   }
 
-  const handleStop = () => {
-    try {
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-        // mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop())
-        mediaRecorderRef.current.stop()
+  async function handleChange(deviceId: string) {
+    if (mediaHandler) {
+      mediaHandler() // cleanup old handler
+    }
+    if (outputVideoRef.current) {
+      const media = await createVideo(deviceId, 1280, 720, outputVideoRef.current)
+      setMediaHandler(media)
+    }
+  }
+
+  async function handleDeviceChange(device: MediaDeviceInfo) {
+    if (device.kind === 'videoinput') {
+      if (device.deviceId !== selectedVideoId) {
+        setSelectedVideoId(device.deviceId)
+        handleChange(device.deviceId)
+
       }
-    } catch (e) {
-      console.log('handleStop: error', e)
-    }
-  }
-
-  const handleSave = () => {
-    let sourceBlob: Blob | null = null
-    try {
-      if (recordedDataRef.current === null) return // we already stopped
-
-      sourceBlob = new Blob(recordedDataRef.current, {
-        type: 'video/webm',
-      })
-      recordedDataRef.current = null
-    } catch (e) {
-      console.log('mediaRecorder.onStop error:', e)
-      return
+    } else if (device.kind === 'audioinput') {
+      if (device.deviceId !== selectedAudioId) {
+        setSelectedAudioId(device.deviceId)
+      }
     }
 
-    const a = document.createElement('a')
-    a.style.cssText = 'display: none'
-    const url = window.URL.createObjectURL(sourceBlob)
-    a.href = url
-    a.download = 'test.webm'
-    a.click()
-    window.URL.revokeObjectURL(url)
   }
 
-  const onResults = (results: Results) => {
-    if (!contextRef.current || !canvasRef.current) return
-
-    contextRef.current.save();
-    contextRef.current.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height)
-
-    contextRef.current.drawImage(results.segmentationMask, 0, 0, canvasRef.current.width, canvasRef.current.height)
-
-    contextRef.current.globalCompositeOperation = "source-in"
-    contextRef.current.drawImage(results.image, 0, 0, canvasRef.current.width, canvasRef.current.height)
-
-    contextRef.current.restore()
-  };
-
+  if (mediaStreamTrackApiUnsupported) {
+    return <div className="App">
+      <span>Your browser does not support the experimental MediaStreamTrack API for Insertable Streams of Media.</span>
+    </div>
+  }
   return (
     <div className="App">
-      <video className='videoSource' autoPlay ref={inputVideoRef} />
-      <canvas className='canvas' ref={canvasRef} width={1280} height={720} />
-      <video className='videoDest' autoPlay ref={outputVideoRef} />
-
+      <div className='videoContainer'>
+        <video className='videoOutput' autoPlay ref={outputVideoRef} />
+      </div>
       <div className='controls'>
-        <button disabled={recording} onClick={() => handleStart()}>Start</button>
-        <button disabled={!recording} onClick={() => handleStop()}>Stop</button>
-        <button disabled={!hasRecorededData} onClick={() => handleSave()}>Save</button>
+        <div className='buttons'>
+          <button disabled={recordingState !== RecordingState.preview} onClick={() => handleStart()}>Start</button>
+          <button disabled={recordingState !== RecordingState.recording} onClick={() => handleStop()}>Stop</button>
+          <button disabled={recordingState !== RecordingState.review} onClick={() => handleSave()}>Save</button>
+        </div>
+
+        <div className='deviceSelector'>
+          <DeviceSelector label='Video Device' predicate={videoPredicate} selectedDeviceId={selectedVideoId}
+            onDeviceSelected={(di) => handleDeviceChange(di)} />
+          <DeviceSelector label='Audio Device' predicate={audioPredicate} selectedDeviceId={selectedAudioId}
+            onDeviceSelected={(di) => handleDeviceChange(di)} includeNone />
+        </div>
       </div>
     </div>
   )
 }
+
+const videoPredicate = (d: MediaDeviceInfo) => d.kind === 'videoinput'
+const audioPredicate = (d: MediaDeviceInfo) => d.kind === 'audioinput'
 
 export default App;
