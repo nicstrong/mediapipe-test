@@ -1,9 +1,12 @@
+import { ActionIcon } from '@mantine/core';
+import { IconFileDownload, IconPlayerPlay, IconPlayerRecord, IconPlayerStop } from '@tabler/icons';
 import { useMemo, useRef, useState } from 'react';
 import './App.css';
 import { DeviceSelector } from './DeviceSelector';
-import { createVideo } from './media';
+import { createVideoStream } from './media';
+import { StreamRecorder } from './StreamRecorder';
+import { UnwrapPromise } from './utils';
 
-type UnwrapPromise<T> = T extends Promise<(infer R)> ? R : never
 
 enum RecordingState {
   preview = 'preview',
@@ -14,7 +17,8 @@ function App() {
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null)
   const [selectedAudioId, setSelectedAudioId] = useState<string | null>(null)
   const [recordingState, setRecordingState] = useState<RecordingState>(RecordingState.preview)
-  const [mediaHandler, setMediaHandler] = useState<UnwrapPromise<ReturnType<typeof createVideo>> | null>(null)
+  const [mediaHandler, setMediaHandler] = useState<UnwrapPromise<ReturnType<typeof createVideoStream>> | null>(null)
+  const [streamRecorder, setStreamRecorder] = useState<StreamRecorder | null>(null)
 
   const mediaStreamTrackApiUnsupported = useMemo(() => {
 
@@ -24,24 +28,63 @@ function App() {
 
   const outputVideoRef = useRef<HTMLVideoElement | null>(null)
 
-
-
-  function handleStart() {
+  async function handleRecord() {
+    if (!mediaHandler) return
+    const recorder = new StreamRecorder(mediaHandler.stream, 'video/webm;codecs=vp9')
+    setStreamRecorder(recorder)
+    await recorder.start(() => {
+      setRecordingState(RecordingState.recording)
+    }, () => {
+      setRecordingState(RecordingState.review)
+      if (recorder?.blob) {
+        const dataUrl = URL.createObjectURL(recorder.blob)
+        if (outputVideoRef.current) {
+          outputVideoRef.current.autoplay = false
+          outputVideoRef.current.src = dataUrl
+        }
+      }
+    })
 
   }
-  function handleStop() {
-
+  async function handleStop() {
+    if (!streamRecorder) return
+    streamRecorder.stop()
+    if (outputVideoRef.current) {
+      outputVideoRef.current.srcObject = null
+    }
+    mediaHandler?.close()
   }
-  function handleSave() {
 
+  function handlePlay() {
+    if (outputVideoRef.current) {
+      outputVideoRef.current.play()
+    }
+  }
+
+  function handleDownload() {
+    if (streamRecorder?.blob) {
+      const a = document.createElement('a')
+      a.style.cssText = 'display: none'
+      const url = window.URL.createObjectURL(streamRecorder.blob)
+      a.href = url
+      a.download = 'test.webm'
+      a.click()
+      window.URL.revokeObjectURL(url)
+    }
   }
 
   async function handleChange(deviceId: string) {
     if (mediaHandler) {
-      mediaHandler() // cleanup old handler
+      if (outputVideoRef.current) {
+        outputVideoRef.current.srcObject = null
+      }
+      mediaHandler.close() // cleanup old handler
     }
     if (outputVideoRef.current) {
-      const media = await createVideo(deviceId, 1280, 720, outputVideoRef.current)
+      const media = await createVideoStream(deviceId, 1280, 720)
+      if (outputVideoRef.current) {
+        outputVideoRef.current.srcObject = media.stream
+      }
       setMediaHandler(media)
     }
   }
@@ -58,7 +101,6 @@ function App() {
         setSelectedAudioId(device.deviceId)
       }
     }
-
   }
 
   if (mediaStreamTrackApiUnsupported) {
@@ -73,9 +115,18 @@ function App() {
       </div>
       <div className='controls'>
         <div className='buttons'>
-          <button disabled={recordingState !== RecordingState.preview} onClick={() => handleStart()}>Start</button>
-          <button disabled={recordingState !== RecordingState.recording} onClick={() => handleStop()}>Stop</button>
-          <button disabled={recordingState !== RecordingState.review} onClick={() => handleSave()}>Save</button>
+          <ActionIcon variant="default" size='xl' disabled={recordingState !== RecordingState.preview} onClick={() => handleRecord()} title='Record'>
+            <IconPlayerRecord size={34} color='red' />
+          </ActionIcon>
+          <ActionIcon variant="default" size='xl' disabled={recordingState !== RecordingState.recording} onClick={() => handleStop()} title='Stop'>
+            <IconPlayerStop size={34} />
+          </ActionIcon>
+          <ActionIcon variant="default" size='xl' disabled={recordingState !== RecordingState.review} onClick={() => handlePlay()} title='Play'>
+            <IconPlayerPlay size={34} />
+          </ActionIcon>
+          <ActionIcon variant="default" size='xl' disabled={recordingState !== RecordingState.review} onClick={() => handleDownload()} title='Download'>
+            <IconFileDownload size={34} />
+          </ActionIcon>
         </div>
 
         <div className='deviceSelector'>

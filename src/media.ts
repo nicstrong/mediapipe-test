@@ -1,9 +1,9 @@
 import { SelfieSegmentation } from "@mediapipe/selfie_segmentation"
+import { cleanup } from "@testing-library/react"
 
 const FRAME_RATE = 30
-export async function createVideo(videoDeviceId: string,
-    width: number, height: number,
-    previewVideoElem: HTMLVideoElement) {
+export async function createVideoStream(videoDeviceId: string,
+    width: number, height: number) {
     let segmentStream: MediaStream | null = null
     const stream = await navigator.mediaDevices.getUserMedia(
         {
@@ -23,7 +23,6 @@ export async function createVideo(videoDeviceId: string,
     const processor = new MediaStreamTrackProcessor({ track })
     segmentStream = new MediaStream([segmentGenerator])
 
-    previewVideoElem.srcObject = segmentStream
 
     processor.readable.pipeThrough(new TransformStream({
         transform: (frame, controller) => segment(frame, controller)
@@ -74,12 +73,14 @@ export async function createVideo(videoDeviceId: string,
         await selfieSegmentation.send({ image: segmentCanvas as any });
     }
 
-    return () => {
-        console.log('createVideo: cleanup called')
-        // previewVideoElem.srcObject = null
-        // if (segmentStream) {
-        //     segmentStream.getTracks().forEach(track => track.stop())
-        // }
-        // selfieSegmentation.close()
+    return {
+        stream: segmentStream,
+        close: () => {
+            console.log('createVideo: cleanup called')
+            if (segmentStream) {
+                segmentStream.getTracks().forEach(track => track.stop())
+            }
+            selfieSegmentation.close()
+        }
     }
 }
